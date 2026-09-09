@@ -1,0 +1,28 @@
+/* ============================================
+   AUDIT LOGS STYLES
+   ============================================ */
+
+.audit-table td {
+  vertical-align: middle;
+}
+
+.audit-table th {
+  padding-bottom: 16px;
+}
+
+.sys-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+}
+
+.audit-table tr:hover .sys-avatar {
+  background: white;
+  border-color: #cbd5e1;
+}

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+.env
+.tmp-*
+.DS_Store
+.claude/
+.windsurf/
+.agents/

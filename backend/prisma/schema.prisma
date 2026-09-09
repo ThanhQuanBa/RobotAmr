@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id       String    @id @default(uuid())
+  username String    @unique
+  password String
+  role     String    @default("visitor")
+  bookings Booking[]
+}
+
+model Route {
+  id       String    @id @default(uuid())
+  name     String
+  length   Int
+  estTime  Int
+  bookings Booking[]
+  waypoints Waypoint[]
+}
+
+model Waypoint {
+  id       String  @id @default(uuid())
+  x        Float
+  y        Float
+  isPOI    Boolean @default(false)
+  poiName  String?
+
+  routeId  String
+  route    Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+}
+
+model Booking {
+  id          String   @id @default(uuid())
+  visitorName String
+  timeSlot    String
+  status      String   @default("PENDING")
+  
+  routeId     String
+  route       Route    @relation(fields: [routeId], references: [id])
+  
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+
+  createdAt   DateTime @default(now())
+}
