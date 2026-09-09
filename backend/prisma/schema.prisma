@@ -3,49 +3,305 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String   @db.VarChar(50)
+  description String?  @db.VarChar(255)
+  users       User[]
+
+  @@map("roles")
 }
 
 model User {
-  id       String    @id @default(uuid())
-  username String    @unique
-  password String
-  role     String    @default("visitor")
-  bookings Booking[]
+  id              Int               @id @default(autoincrement())
+  role_id         Int
+  full_name       String            @db.VarChar(150)
+  email           String            @db.VarChar(150)
+  password_hash   String            @db.VarChar(255)
+  phone           String?           @db.VarChar(30)
+  status          String            @db.VarChar(30)
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
+  role            Role              @relation(fields: [role_id], references: [id])
+  tours_created   Tour[]            @relation("ToursCreatedBy")
+  robot_commands  RobotCommand[]
+  tour_sessions   TourSession[]     @relation("TourSessionsStartedBy")
+  notifications   Notification[]
+
+  @@map("users")
 }
 
-model Route {
-  id       String    @id @default(uuid())
-  name     String
-  length   Int
-  estTime  Int
-  bookings Booking[]
-  waypoints Waypoint[]
+model Campus {
+  id             Int              @id @default(autoincrement())
+  name           String           @db.VarChar(150)
+  address        String?          @db.VarChar(255)
+  description    String?          @db.Text
+  created_at     DateTime         @default(now())
+  maps           Map[]
+  tour_points    TourPoint[]
+  tours          Tour[]
+  tour_bookings  TourBooking[]
+  knowledge_base KnowledgeBase[]
+
+  @@map("campuses")
+}
+
+model Map {
+  id             Int               @id @default(autoincrement())
+  campus_id      Int
+  name           String            @db.VarChar(150)
+  version        String?           @db.VarChar(50)
+  map_type       String?           @db.VarChar(30)
+  map_file_url   String?           @db.VarChar(500)
+  resolution     Decimal?          @db.Decimal(8, 4)
+  width          Decimal?          @db.Decimal(12, 4)
+  height         Decimal?          @db.Decimal(12, 4)
+  is_active      Boolean           @default(true)
+  created_at     DateTime          @default(now())
+  updated_at     DateTime          @updatedAt
+  campus         Campus            @relation(fields: [campus_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  waypoints      Waypoint[]
+  robots         Robot[]
+  robot_locations RobotLocation[]
+
+  @@map("maps")
 }
 
 model Waypoint {
-  id       String  @id @default(uuid())
-  x        Float
-  y        Float
-  isPOI    Boolean @default(false)
-  poiName  String?
+  id            Int          @id @default(autoincrement())
+  map_id        Int
+  name          String       @db.VarChar(150)
+  code          String?      @db.VarChar(50)
+  x             Decimal      @db.Decimal(12, 4)
+  y             Decimal      @db.Decimal(12, 4)
+  heading       Decimal?     @db.Decimal(6, 2)
+  waypoint_type String?      @db.VarChar(50)
+  is_active     Boolean      @default(true)
+  map           Map          @relation(fields: [map_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tour_points   TourPoint[]
 
-  routeId  String
-  route    Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  @@map("waypoints")
 }
 
-model Booking {
-  id          String   @id @default(uuid())
-  visitorName String
-  timeSlot    String
-  status      String   @default("PENDING")
-  
-  routeId     String
-  route       Route    @relation(fields: [routeId], references: [id])
-  
-  userId      String?
-  user        User?    @relation(fields: [userId], references: [id])
+model TourPoint {
+  id             Int         @id @default(autoincrement())
+  campus_id      Int
+  waypoint_id    Int
+  name           String      @db.VarChar(150)
+  code           String?     @db.VarChar(50)
+  information    String?     @db.Text
+  image_url      String?     @db.VarChar(500)
+  audio_url      String?     @db.VarChar(500)
+  estimated_time Int?
+  campus         Campus      @relation(fields: [campus_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  waypoint       Waypoint    @relation(fields: [waypoint_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tour_stops     TourStop[]
 
-  createdAt   DateTime @default(now())
+  @@map("tour_points")
+}
+
+model Tour {
+  id                 Int             @id @default(autoincrement())
+  campus_id          Int
+  name               String          @db.VarChar(150)
+  description        String?         @db.Text
+  estimated_duration Int?
+  status             String          @db.VarChar(30)
+  created_by         Int
+  campus             Campus          @relation(fields: [campus_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  creator            User            @relation("ToursCreatedBy", fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tour_stops         TourStop[]
+  tour_bookings      TourBooking[]
+  tour_sessions      TourSession[]
+
+  @@map("tours")
+}
+
+model TourStop {
+  id               Int       @id @default(autoincrement())
+  tour_id          Int
+  tour_point_id    Int
+  stop_order       Int
+  narration        String?   @db.Text
+  duration_minutes Int?
+  tour             Tour      @relation(fields: [tour_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tour_point       TourPoint @relation(fields: [tour_point_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("tour_stops")
+}
+
+model Robot {
+  id               Int                 @id @default(autoincrement())
+  robot_code       String              @db.VarChar(50)
+  name             String              @db.VarChar(100)
+  is_online        Boolean             @default(false)
+  last_ping_at     DateTime?
+  battery_level    Decimal?            @db.Decimal(5, 2)
+  is_estop_pressed Boolean             @default(false)
+  operation_mode   String?             @db.VarChar(30)
+  nav_status       String?             @db.VarChar(30)
+  task_status      String?             @db.VarChar(30)
+  current_map_id   Int?
+  current_x        Decimal?            @db.Decimal(12, 4)
+  current_y        Decimal?            @db.Decimal(12, 4)
+  heading          Decimal?            @db.Decimal(6, 2)
+  current_error    String?             @db.Text
+  map              Map?                @relation(fields: [current_map_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  locations        RobotLocation[]
+  status_logs      RobotStatusLog[]
+  commands         RobotCommand[]
+  tour_sessions    TourSession[]
+  notifications    Notification[]
+
+  @@map("robots")
+}
+
+model RobotLocation {
+  id          BigInt    @id @default(autoincrement())
+  robot_id    Int
+  map_id      Int
+  x           Decimal   @db.Decimal(12, 4)
+  y           Decimal   @db.Decimal(12, 4)
+  heading     Decimal?  @db.Decimal(6, 2)
+  speed       Decimal?  @db.Decimal(6, 2)
+  recorded_at DateTime  @default(now())
+  robot       Robot     @relation(fields: [robot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  map         Map       @relation(fields: [map_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("robot_locations")
+}
+
+model RobotStatusLog {
+  id            BigInt    @id @default(autoincrement())
+  robot_id      Int
+  status        String    @db.VarChar(30)
+  battery_level Decimal?  @db.Decimal(5, 2)
+  error_message String?   @db.Text
+  recorded_at   DateTime  @default(now())
+  robot         Robot     @relation(fields: [robot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("robot_status_logs")
+}
+
+model RobotCommand {
+  id           BigInt    @id @default(autoincrement())
+  robot_id     Int
+  user_id      Int
+  command_type String    @db.VarChar(50)
+  parameters   String?   @db.Text
+  status       String    @db.VarChar(30)
+  created_at   DateTime  @default(now())
+  executed_at  DateTime?
+  robot        Robot     @relation(fields: [robot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user         User      @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("robot_commands")
+}
+
+model Visitor {
+  id            Int           @id @default(autoincrement())
+  full_name     String        @db.VarChar(150)
+  email         String        @db.VarChar(150)
+  phone         String?       @db.VarChar(30)
+  guest_type    String?       @db.VarChar(50)
+  created_at    DateTime      @default(now())
+  tour_bookings TourBooking[]
+  ai_sessions   AiSession[]
+
+  @@map("visitors")
+}
+
+model TourBooking {
+  id                  Int           @id @default(autoincrement())
+  visitor_id          Int
+  tour_id             Int
+  campus_id           Int
+  scheduled_time      DateTime
+  pax_count           Int
+  language_preference String?       @db.VarChar(20)
+  status              String        @db.VarChar(30)
+  created_at          DateTime      @default(now())
+  visitor             Visitor       @relation(fields: [visitor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tour                Tour          @relation(fields: [tour_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  campus              Campus        @relation(fields: [campus_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tour_sessions       TourSession[]
+
+  @@map("tour_bookings")
+}
+
+model TourSession {
+  id                 BigInt       @id @default(autoincrement())
+  tour_id            Int
+  robot_id           Int
+  booking_id         Int
+  started_by         Int
+  status             String       @db.VarChar(30)
+  current_stop_order Int?
+  started_at         DateTime     @default(now())
+  ended_at           DateTime?
+  tour               Tour         @relation(fields: [tour_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  robot              Robot        @relation(fields: [robot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  booking            TourBooking  @relation(fields: [booking_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  starter            User         @relation("TourSessionsStartedBy", fields: [started_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ai_sessions        AiSession[]
+
+  @@map("tour_sessions")
+}
+
+model KnowledgeBase {
+  id               Int      @id @default(autoincrement())
+  campus_id        Int
+  topic            String   @db.VarChar(150)
+  content          String   @db.Text
+  embedding_vector String?  @db.Text
+  is_active        Boolean  @default(true)
+  updated_at       DateTime @updatedAt
+  campus           Campus   @relation(fields: [campus_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("knowledge_base")
+}
+
+model AiSession {
+  id              BigInt       @id @default(autoincrement())
+  tour_session_id BigInt
+  visitor_id      Int
+  language        String?      @db.VarChar(20)
+  started_at      DateTime     @default(now())
+  tour_session    TourSession  @relation(fields: [tour_session_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  visitor         Visitor      @relation(fields: [visitor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ai_messages     AiMessage[]
+
+  @@map("ai_sessions")
+}
+
+model AiMessage {
+  id              BigInt      @id @default(autoincrement())
+  ai_session_id   BigInt
+  sender_type     String      @db.VarChar(30)
+  message         String      @db.Text
+  audio_url       String?     @db.VarChar(500)
+  intent_detected String?     @db.VarChar(100)
+  created_at      DateTime    @default(now())
+  ai_session      AiSession   @relation(fields: [ai_session_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("ai_messages")
+}
+
+model Notification {
+  id          BigInt   @id @default(autoincrement())
+  user_id     Int
+  robot_id    Int
+  type        String   @db.VarChar(50)
+  title       String   @db.VarChar(200)
+  message     String?  @db.Text
+  is_read     Boolean  @default(false)
+  created_at  DateTime @default(now())
+  user        User     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  robot       Robot    @relation(fields: [robot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("notifications")
 }
