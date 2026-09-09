@@ -19,6 +19,8 @@ import RouteEditor from './pages/admin/RouteEditor';
 import SystemPolicies from './pages/admin/SystemPolicies';
 import AuditLogs from './pages/admin/AuditLogs';
 
+import OperatorDashboard from './pages/OperatorDashboard';
+
 import './App.css';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -72,6 +74,7 @@ function App() {
             </ProtectedRoute>
           }>
             <Route index element={<Dashboard />} />
+            <Route path="operator" element={<OperatorDashboard />} />
             <Route path="users" element={<UserManagement />} />
             <Route path="routes" element={<RouteEditor />} />
             <Route path="policies" element={<SystemPolicies />} />

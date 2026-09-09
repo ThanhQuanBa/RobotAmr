@@ -67,30 +67,33 @@ const mapPOIs = [
 
 // --- Seed Database on Startup ---
 async function seedDatabase() {
-  const admin = await prisma.user.findUnique({ where: { username: 'admin' } });
-  if (!admin) {
-    await prisma.user.create({
-      data: { username: 'admin', password: 'password', role: 'operator' }
-    });
-  }
-  const visitor = await prisma.user.findUnique({ where: { username: 'visitor1' } });
-  if (!visitor) {
-    await prisma.user.create({
-      data: { username: 'visitor1', password: 'password', role: 'visitor' }
-    });
-  }
+  try {
+    let adminRole = await prisma.role.findFirst({ where: { name: 'operator' } });
+    if (!adminRole) {
+      adminRole = await prisma.role.create({ data: { name: 'operator', description: 'System Operator' } });
+    }
+    let visitorRole = await prisma.role.findFirst({ where: { name: 'visitor' } });
+    if (!visitorRole) {
+      visitorRole = await prisma.role.create({ data: { name: 'visitor', description: 'Guest User' } });
+    }
 
-  const routesCount = await prisma.route.count();
-  if (routesCount === 0) {
-    await prisma.route.createMany({
-      data: [
-        { name: 'Campus Full Tour', length: 2000, estTime: 45 },
-        { name: 'Museum Highlights', length: 800, estTime: 20 },
-        { name: 'Garden & Outdoor', length: 1200, estTime: 30 }
-      ]
-    });
+    const admin = await prisma.user.findFirst({ where: { email: 'admin' } });
+    if (!admin) {
+      await prisma.user.create({
+        data: { email: 'admin', password_hash: 'password', full_name: 'Admin', status: 'ACTIVE', role_id: adminRole.id }
+      });
+    }
+
+    const visitor = await prisma.user.findFirst({ where: { email: 'visitor1' } });
+    if (!visitor) {
+      await prisma.user.create({
+        data: { email: 'visitor1', password_hash: 'password', full_name: 'Visitor 1', status: 'ACTIVE', role_id: visitorRole.id }
+      });
+    }
+    console.log('Database seeded successfully.');
+  } catch (error) {
+    console.error('Error seeding database:', error.message);
   }
-  console.log('Database seeded successfully.');
 }
 
 // ============================================================
@@ -98,10 +101,13 @@ async function seedDatabase() {
 // ============================================================
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
-  const user = await prisma.user.findUnique({ where: { username } });
+  const user = await prisma.user.findFirst({ 
+    where: { email: username },
+    include: { role: true }
+  });
 
-  if (user && user.password === password) {
-    res.json({ success: true, user: { id: user.id, username: user.username, role: user.role } });
+  if (user && user.password_hash === password) {
+    res.json({ success: true, user: { id: user.id, username: user.email, role: user.role.name } });
   } else {
     res.status(401).json({ error: 'Invalid username or password' });
   }
@@ -110,16 +116,22 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/auth/register', async (req, res) => {
   const { username, password } = req.body;
 
-  const existingUser = await prisma.user.findUnique({ where: { username } });
+  const existingUser = await prisma.user.findFirst({ where: { email: username } });
   if (existingUser) {
     return res.status(400).json({ error: 'Username already exists' });
   }
 
+  let visitorRole = await prisma.role.findFirst({ where: { name: 'visitor' } });
+  if (!visitorRole) {
+    visitorRole = await prisma.role.create({ data: { name: 'visitor' } });
+  }
+
   const newUser = await prisma.user.create({
-    data: { username, password, role: 'visitor' }
+    data: { email: username, password_hash: password, full_name: username, status: 'ACTIVE', role_id: visitorRole.id },
+    include: { role: true }
   });
 
-  res.json({ success: true, user: { id: newUser.id, username: newUser.username, role: newUser.role } });
+  res.json({ success: true, user: { id: newUser.id, username: newUser.email, role: newUser.role.name } });
 });
 
 // ============================================================

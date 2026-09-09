@@ -1,19 +1,70 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { io } from 'socket.io-client';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, useGLTF, Html } from '@react-three/drei';
 import {
   Activity, Battery, AlertTriangle, CheckCircle, Navigation, Gauge,
   Monitor, Box, RefreshCw, Zap, Radio, Eye, Play, Square,
-  ChevronRight, Cpu, Wifi, WifiOff
+  ChevronRight, Cpu, Wifi, WifiOff,
+  MousePointer2, Hand, Waypoints, Tag, Ruler
 } from 'lucide-react';
 import './OperatorDashboard.css';
 
 const SOCKET_URL = window.location.origin;
 
+// --- 3D Components ---
+function Map3DModel() {
+  const { scene } = useGLTF('/map.glb');
+  return <primitive object={scene} scale={1} position={[0, 0, 0]} />;
+}
+
+function Robot3D({ amr, isSelected, onClick }) {
+  const isFault = amr.status === 'FAULT';
+  const color = isFault ? '#ff1744' : (amr.status === 'AT_POI' ? '#00e676' : '#00d2ff');
+  
+  // Tùy chỉnh hệ số scale này để vừa với kích thước thật của bản đồ 3D
+  const scaleFactor = 1; 
+  const x = amr.pose.x * scaleFactor;
+  const z = amr.pose.y * scaleFactor;
+  const y = 1; 
+  
+  return (
+    <group position={[x, y, z]} onClick={(e) => { e.stopPropagation(); onClick(); }} rotation={[0, -amr.pose.theta || 0, 0]}>
+      {/* Thân robot */}
+      <mesh>
+        <boxGeometry args={[4, 2, 6]} />
+        <meshStandardMaterial color={color} emissive={isSelected ? color : 'black'} emissiveIntensity={isSelected ? 0.8 : 0} />
+      </mesh>
+      
+      {/* Mũi tên chỉ hướng */}
+      <mesh position={[0, 1, 3]}>
+        <boxGeometry args={[2, 0.5, 2]} />
+        <meshStandardMaterial color="#fff" />
+      </mesh>
+
+      {/* Hiển thị tên Robot */}
+      <Html position={[0, 3, 0]} center>
+        <div style={{ 
+          background: isSelected ? color : 'rgba(0,0,0,0.8)', 
+          color: 'white', padding: '4px 8px', borderRadius: '4px', 
+          fontSize: '12px', fontWeight: 'bold', whiteSpace: 'nowrap',
+          border: `1px solid ${color}`,
+          pointerEvents: 'none'
+        }}>
+          {amr.name} {isFault ? '⚠️' : ''}
+        </div>
+      </Html>
+    </group>
+  );
+}
+// ---------------------
+
 export default function OperatorDashboard() {
   const [fleet, setFleet] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [selectedAmr, setSelectedAmr] = useState(null);
-  const [activeTab, setActiveTab] = useState('twin'); // 'twin' | 'foxglove'
+  const [activeTab, setActiveTab] = useState('3dmap'); // '3dmap' | 'twin' | 'foxglove'
+  const [activeTool, setActiveTool] = useState('select');
   const [foxgloveConfig, setFoxgloveConfig] = useState(null);
   const [pois, setPois] = useState([]);
   const [tourEvents, setTourEvents] = useState([]);
@@ -227,6 +278,9 @@ export default function OperatorDashboard() {
 
       {/* Tab Bar */}
       <div className="tab-bar">
+        <button className={`tab-btn ${activeTab === '3dmap' ? 'active' : ''}`} onClick={() => setActiveTab('3dmap')}>
+          <Box size={16} /> 3D Map View
+        </button>
         <button className={`tab-btn ${activeTab === 'twin' ? 'active' : ''}`} onClick={() => setActiveTab('twin')}>
           <Eye size={16} /> 2D Digital Twin
         </button>
@@ -238,7 +292,66 @@ export default function OperatorDashboard() {
       <div className="dashboard-grid">
         {/* Main View */}
         <div className="glass-panel map-container">
-          {activeTab === 'twin' ? (
+          {activeTab === '3dmap' ? (
+            <>
+              <div className="panel-header">
+                <h3>Interactive 3D Campus Map</h3>
+                <span className="live-indicator">● LIVE 3D</span>
+              </div>
+              <div className="canvas-wrapper" style={{ position: 'relative', width: '100%', height: '100%', minHeight: '420px', background: '#111' }}>
+                
+                {/* Floating 3D Map Toolbar */}
+                <div className="map-toolbar">
+                  <button 
+                    className={`tool-btn ${activeTool === 'select' ? 'active' : ''}`}
+                    onClick={() => setActiveTool('select')}
+                    data-title="Select Object"
+                  ><MousePointer2 size={18} /></button>
+                  <button 
+                    className={`tool-btn ${activeTool === 'pan' ? 'active' : ''}`}
+                    onClick={() => setActiveTool('pan')}
+                    data-title="Pan Map"
+                  ><Hand size={18} /></button>
+                  <button 
+                    className={`tool-btn ${activeTool === 'route' ? 'active' : ''}`}
+                    onClick={() => setActiveTool('route')}
+                    data-title="Edit Route"
+                  ><Waypoints size={18} /></button>
+                  <button 
+                    className={`tool-btn ${activeTool === 'tag' ? 'active' : ''}`}
+                    onClick={() => setActiveTool('tag')}
+                    data-title="Add POI Tag"
+                  ><Tag size={18} /></button>
+                  <button 
+                    className={`tool-btn ${activeTool === 'measure' ? 'active' : ''}`}
+                    onClick={() => setActiveTool('measure')}
+                    data-title="Measure Distance"
+                  ><Ruler size={18} /></button>
+                </div>
+
+                <Canvas camera={{ position: [0, 50, 100], fov: 45 }}>
+                  <ambientLight intensity={0.5} />
+                  <directionalLight position={[10, 20, 10]} intensity={1} />
+                  
+                  <Suspense fallback={<Html center><div style={{color:'white'}}>Loading Map...</div></Html>}>
+                    <Map3DModel />
+                  </Suspense>
+
+                  {/* Render AMR Robots */}
+                  {fleet.map(amr => (
+                    <Robot3D 
+                      key={amr.id} 
+                      amr={amr} 
+                      isSelected={selectedAmr === amr.id}
+                      onClick={() => setSelectedAmr(amr.id)}
+                    />
+                  ))}
+
+                  <OrbitControls makeDefault />
+                </Canvas>
+              </div>
+            </>
+          ) : activeTab === 'twin' ? (
             <>
               <div className="panel-header">
                 <h3>Digital Twin Monitor</h3>

@@ -2,13 +2,14 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import {
   LayoutDashboard, Users, Route, ShieldCheck, FileText,
-  Settings, LogOut, Bell, Bus, ChevronLeft, ChevronRight
+  Settings, LogOut, Bell, Bus, ChevronLeft, ChevronRight, Monitor
 } from 'lucide-react';
 import { useState } from 'react';
 import './AdminLayout.css';
 
 const navItems = [
   { path: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
+  { path: '/admin/operator', icon: Monitor, label: 'Operations Center' },
   { path: '/admin/users', icon: Users, label: 'User Management' },
   { path: '/admin/routes', icon: Route, label: 'Route & POI Editor' },
   { path: '/admin/policies', icon: ShieldCheck, label: 'System Policies' },
